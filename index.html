@@ -1,0 +1,1825 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schema Dowser · 表格探矿仪</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --ink:#111827; --ink2:#4b5563; --ink3:#9ca3af;
+    --line:#e5e7eb; --line2:#f0f1f3;
+    --acc:#4f46e5; --acc-soft:#eef2ff;
+    --red:#dc2626; --red-soft:#fef2f2;
+    --amber:#d97706; --amber-soft:#fffbeb;
+    --green:#059669; --green-soft:#ecfdf5;
+    --blue:#2563eb; --blue-soft:#eff6ff;
+    --violet:#7c3aed; --violet-soft:#f5f3ff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 22px 80px}
+  header.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+  header.top h1{font-size:23px;margin:0;letter-spacing:-.2px}
+  header.top .tag{color:var(--ink2);font-size:13px;margin:0}
+  header.top .gh{margin-left:auto;font-size:12px;color:var(--ink3)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .card-h{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line2);background:#fcfcfd}
+  .card-h h2{font-size:14px;margin:0;font-weight:600}
+  .card-h .hint{font-size:12px;color:var(--ink3);font-weight:400}
+  .card-h .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .card-b{padding:16px}
+
+  textarea{
+    width:100%;min-height:150px;resize:vertical;padding:12px 13px;
+    border:1px solid var(--line);border-radius:9px;background:#fdfdfe;color:var(--ink);
+    font:12.5px/1.7 var(--mono);outline:none;
+  }
+  textarea:focus{border-color:var(--acc);background:#fff}
+  .drop.over textarea{border-color:var(--acc);background:var(--acc-soft)}
+
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px}
+  .row label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2)}
+  .row .spacer{flex:1}
+  select,input[type=number]{
+    border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:12.5px;
+    background:#fff;color:var(--ink);outline:none;
+  }
+  input[type=number]{width:82px}
+  button{
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+    border-radius:8px;padding:7px 13px;font-size:12.5px;cursor:pointer;
+    font-family:inherit;transition:.12s;
+  }
+  button:hover{border-color:#cbd5e1;background:#f9fafb}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:500}
+  button.primary:hover{background:#4338ca;border-color:#4338ca}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  .err{color:var(--red);font-size:12.5px;margin-top:10px;min-height:18px}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;background:var(--line2)}
+  .stat{background:#fff;padding:13px 15px}
+  .stat .k{font-size:11px;color:var(--ink3);letter-spacing:.03em}
+  .stat .v{font-size:20px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+  .stat .s{font-size:11px;color:var(--ink3);margin-top:1px}
+
+  /* tabs */
+  .tabs{display:flex;gap:2px;margin:0 0 16px;border-bottom:1px solid var(--line)}
+  .tabs button{
+    border:none;border-radius:0;background:transparent;padding:10px 15px;font-size:13px;
+    color:var(--ink2);border-bottom:2px solid transparent;margin-bottom:-1px;
+  }
+  .tabs button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:500}
+  [data-tab]{display:none}
+  [data-tab].on{display:block}
+
+  /* column cards */
+  .cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px}
+  .col{border:1px solid var(--line);border-radius:10px;padding:12px 13px;background:#fff}
+  .col.pk{border-color:#c7d2fe;background:linear-gradient(180deg,#f8faff,#fff)}
+  .col-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+  .cname{font:600 13px var(--mono);word-break:break-all}
+  .badge{font-size:10.5px;padding:1.5px 6px;border-radius:5px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+  .b-int{background:var(--blue-soft);color:var(--blue)}
+  .b-float{background:#ecfeff;color:#0e7490}
+  .b-bool{background:var(--violet-soft);color:var(--violet)}
+  .b-date{background:var(--green-soft);color:var(--green)}
+  .b-datetime{background:var(--green-soft);color:var(--green)}
+  .b-enum{background:var(--amber-soft);color:var(--amber)}
+  .b-text{background:#f3f4f6;color:#4b5563}
+  .b-email,.b-url,.b-uuid,.b-ip{background:#fdf2f8;color:#be185d}
+  .b-pk{background:var(--acc-soft);color:var(--acc)}
+  .b-uq{background:#eef2ff;color:#4338ca}
+  .b-null{background:#f3f4f6;color:#6b7280}
+  .b-warn{background:var(--red-soft);color:var(--red)}
+
+  .meter{height:5px;border-radius:3px;background:var(--line2);overflow:hidden;margin:7px 0 3px;display:flex}
+  .meter i{display:block;height:100%}
+  .mlab{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .kv{font-size:11.5px;color:var(--ink2);margin-top:6px;font-variant-numeric:tabular-nums;word-break:break-word}
+  .kv b{color:var(--ink);font-weight:600}
+  .topv{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+  .topv span{font:11px var(--mono);background:#f6f7f9;border:1px solid var(--line2);border-radius:5px;padding:1px 6px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .flag{margin-top:8px;font-size:11.5px;padding:5px 8px;border-radius:6px;background:var(--amber-soft);color:#92400e;border:1px solid #fde68a}
+  .flag.bad{background:var(--red-soft);color:#991b1b;border-color:#fecaca}
+  .flag.ok{background:var(--green-soft);color:#065f46;border-color:#a7f3d0}
+
+  /* deps */
+  .dep{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px;background:#fff}
+  .dep-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .arrow{color:var(--ink3);font-weight:600}
+  .chip{font:12px var(--mono);background:#f6f7f9;border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .chip.k{background:var(--acc-soft);border-color:#c7d2fe;color:#3730a3;font-weight:600}
+  .dep-m{font-size:11.5px;color:var(--ink3);margin-top:6px}
+  .pill{font-size:11px;padding:1.5px 7px;border-radius:20px;font-weight:600}
+  .p-exact{background:var(--green-soft);color:var(--green)}
+  .p-approx{background:var(--amber-soft);color:var(--amber)}
+  .p-trivial{background:#f3f4f6;color:#6b7280}
+
+  /* generic table */
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{color:var(--ink3);font-weight:600;font-size:11.5px;background:#fcfcfd;position:sticky;top:0}
+  td.mono{font-family:var(--mono);font-size:11.5px}
+  .scroll{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:9px}
+
+  pre.ddl{
+    margin:0;padding:14px;background:#fbfbfc;border:1px solid var(--line);border-radius:9px;
+    font:12px/1.75 var(--mono);color:#1f2937;overflow:auto;max-height:520px;white-space:pre;
+  }
+  .note{font-size:12px;color:var(--ink2);background:#fafafb;border-left:3px solid var(--line);padding:9px 12px;border-radius:0 7px 7px 0;margin-bottom:12px}
+  .note.warn{border-left-color:var(--amber);background:var(--amber-soft);color:#78350f}
+  .empty{color:var(--ink3);font-size:12.5px;padding:6px 0}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--ink3);margin-top:10px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+  svg{display:block;max-width:100%;height:auto}
+  .heat{border-collapse:separate;border-spacing:2px;font-size:10px}
+  .heat td{width:22px;height:22px;text-align:center;border-radius:3px;color:#1f2937;font-variant-numeric:tabular-nums;cursor:default}
+  .heat th.lbl{font:10.5px var(--mono);color:var(--ink2);max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px;text-align:right;border:none}
+  .heat td.diag{background:#f3f4f6;color:#d1d5db}
+
+  .mpat{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11.5px}
+  .mpat .grid{display:flex;gap:1px}
+  .mpat .grid i{width:9px;height:15px;border-radius:1px;background:#e5e7eb;display:block}
+  .mpat .grid i.m{background:var(--red)}
+  .mpat .cnt{font-variant-numeric:tabular-nums;color:var(--ink3);min-width:76px}
+  .mpat .pct{font-variant-numeric:tabular-nums;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Schema Dowser</h1>
+    <p class="tag">表格探矿仪 · 把一堆 CSV 丢进来，探出隐藏的键、依赖、脏数据和本该拆出去的表</p>
+    <span class="gh">单文件 · 零依赖 · 离线运行</span>
+  </header>
+
+  <section class="card">
+    <div class="card-h"><h2>1 · 投喂数据</h2><span class="hint">全部在本机内存里算，不联网、不上传</span></div>
+    <div class="card-b">
+      <div class="drop" id="drop">
+        <textarea id="raw" spellcheck="false" placeholder="把 CSV / TSV 粘到这里，或者把 .csv 文件拖进这个框&#10;&#10;例：&#10;order_id,customer_id,customer_name,city,country,unit_price,quantity,total&#10;O1001,C1001,Alice Chen,深圳,中国,39.00,2,78.00"></textarea>
+      </div>
+      <div class="row">
+        <label>分隔符
+          <select id="delim">
+            <option value="auto">自动识别</option>
+            <option value=",">逗号 ,</option>
+            <option value="\t">Tab</option>
+            <option value=";">分号 ;</option>
+            <option value="|">竖线 |</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="hdr" checked> 首行是表头</label>
+        <label>依赖维度
+          <select id="lvl">
+            <option value="1">只看单列</option>
+            <option value="2" selected>最多 2 列</option>
+            <option value="3">最多 3 列</option>
+          </select>
+        </label>
+        <label>采样上限 <input type="number" id="cap" value="4000" min="200" step="500"></label>
+        <span class="spacer"></span>
+        <button id="btnSample">载入示例</button>
+        <button id="btnFile">选择文件</button>
+        <input type="file" id="file" accept=".csv,.tsv,.txt" hidden>
+        <button id="btnClear">清空</button>
+        <button id="btnRun" class="primary">开始探矿</button>
+      </div>
+      <div class="err" id="ioErr"></div>
+    </div>
+  </section>
+
+  <div id="out" hidden>
+    <section class="card">
+      <div class="card-h"><h2>2 · 概览</h2><span class="hint" id="ovHint"></span></div>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <nav class="tabs">
+      <button data-go="cols" class="on">列剖面</button>
+      <button data-go="deps">依赖与键</button>
+      <button data-go="qual">缺失与异常</button>
+      <button data-go="ddl">Schema 建议</button>
+    </nav>
+
+    <section data-tab="cols" class="on">
+      <section class="card">
+        <div class="card-h"><h2>列剖面</h2><span class="hint">每张卡一列：推断类型、基数、缺失、Top 值、异常</span></div>
+        <div class="card-b"><div class="cols" id="colGrid"></div></div>
+      </section>
+    </section>
+
+    <section data-tab="deps">
+      <section class="card">
+        <div class="card-h"><h2>函数依赖</h2><span class="hint" id="depHint"></span></div>
+        <div class="card-b" id="depList"></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>依赖分层图</h2><span class="hint">箭头 A → B 读作「A 一旦确定，B 就唯一确定」</span>
+          <span class="right"><button id="btnSvg">导出 SVG</button><button id="btnPng">导出 PNG</button></span>
+        </div>
+        <div class="card-b" id="depGraph"></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>候选键</h2><span class="hint">能唯一标识一行的最小列组合</span></div>
+        <div class="card-b" id="keyList"></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>列间相关性</h2><span class="hint">数值列用 |Pearson r|，其它用归一化互信息，均归一到 0–1</span></div>
+        <div class="card-b" id="corrBox"></div>
+      </section>
+    </section>
+
+    <section data-tab="qual">
+      <section class="card">
+        <div class="card-h"><h2>缺失模式</h2><span class="hint">哪些列总是一起空着 —— 通常意味着它们属于另一张表</span></div>
+        <div class="card-b" id="missBox"></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>数据质量告警</h2><span class="hint" id="anHint"></span></div>
+        <div class="card-b"><div class="scroll"><table id="anTbl"></table></div></div>
+      </section>
+    </section>
+
+    <section data-tab="ddl">
+      <section class="card">
+        <div class="card-h"><h2>反推出来的 SQL DDL</h2>
+          <span class="right">
+            <select id="dialect">
+              <option value="pg">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="sqlite">SQLite</option>
+            </select>
+            <button id="btnCopyDdl">复制</button>
+            <button id="btnDlDdl">下载 .sql</button>
+          </span>
+        </div>
+        <div class="card-b"><pre class="ddl" id="ddl"></pre></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>规范化建议</h2><span class="hint">哪些列该拆成独立的表</span></div>
+        <div class="card-b" id="normBox"></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>完整报告</h2><span class="right"><button id="btnReport">下载 Markdown</button></span></div>
+        <div class="card-b"><div class="note" id="repNote">报告含概览、每列剖析、依赖清单、候选键、质量告警与 DDL。</div></div>
+      </section>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   Schema Dowser — 表格探矿仪
+   单文件、零依赖、离线。所有计算在浏览器内存里完成。
+   ============================================================ */
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- 工具：数字格式化 ---------- */
+function fmtNum(v){
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if (a >= 1e6) return (v/1e6).toFixed(2) + 'M';
+  if (a >= 1e4) return (v/1e3).toFixed(1) + 'k';
+  if (Number.isInteger(v)) return String(v);
+  if (a < 0.01 && a > 0) return v.toExponential(1);
+  return String(Math.round(v * 1000) / 1000);
+}
+function pct(x, d){ return (x * 100).toFixed(d === undefined ? 1 : d) + '%'; }
+
+/* ============================================================
+   1. 分隔符文本解析
+   ============================================================ */
+function detectDelim(text){
+  const head = text.split(/\r?\n/).slice(0, 5).filter(l => l.length).join('\n');
+  const cands = [',', '\t', ';', '|'];
+  let best = ',', bestN = -1;
+  for (const d of cands){
+    // 统计引号外出现的次数
+    let n = 0, inQ = false;
+    for (let i = 0; i < head.length; i++){
+      const c = head[i];
+      if (c === '"'){ inQ = !inQ; continue; }
+      if (!inQ && c === d) n++;
+    }
+    if (n > bestN){ bestN = n; best = d; }
+  }
+  return bestN === 0 ? ',' : best;
+}
+
+function parseDelimited(text, delim, hasHeader){
+  // 去掉 BOM，统一换行
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rows = [];
+  let row = [], field = '', i = 0, inQ = false, n = text.length;
+  const pushField = () => { row.push(field); field = ''; };
+  const pushRow = () => { pushField(); rows.push(row); row = []; };
+
+  while (i < n){
+    const c = text[i];
+    if (inQ){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i += 2; continue; }
+        inQ = false; i++; continue;
+      }
+      field += c; i++; continue;
+    }
+    if (c === '"'){ inQ = true; i++; continue; }
+    if (c === delim){ pushField(); i++; continue; }
+    if (c === '\n'){ pushRow(); i++; continue; }
+    field += c; i++;
+  }
+  if (field.length || row.length) pushRow();
+
+  // 丢掉全空行
+  const data = rows.filter(r => r.some(v => String(v).trim() !== ''));
+  if (!data.length) return { header: [], rows: [] };
+
+  // 列数以最长行为准，补齐
+  const w = data.reduce((m, r) => Math.max(m, r.length), 0);
+  data.forEach(r => { while (r.length < w) r.push(''); });
+
+  let header, body;
+  if (hasHeader){
+    header = data[0].map((h, i) => { const t = String(h).trim(); return t === '' ? ('col_' + (i+1)) : t; });
+    body = data.slice(1);
+  } else {
+    header = Array.from({length: w}, (_, i) => 'col_' + (i+1));
+    body = data;
+  }
+  return { header, rows: body };
+}
+
+/* ============================================================
+   2. 类型推断
+   ============================================================ */
+const RE = {
+  int:      /^-?\d+$/,
+  float:    /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/,
+  numLike:  /^[\s$€£¥]?-?[\d,]*\.?\d+([eE][+-]?\d+)?[\s%]?$/,
+  email:    /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/,
+  url:      /^(https?|ftp):\/\/[^\s]+$/i,
+  uuid:     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  ipv4:     /^(\d{1,3}\.){3}\d{1,3}$/,
+  isoDate:  /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/,
+  slashDate:/^\d{4}\/\d{1,2}\/\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/,
+  usDate:   /^\d{1,2}\/\d{1,2}\/\d{4}([ T]\d{1,2}:\d{2}(:\d{2})?)?$/,
+  cnDate:   /^\d{4}年\d{1,2}月\d{1,2}日?([\s]\d{1,2}:\d{2}(:\d{2})?)?$/,
+  boolWord: /^(true|false|yes|no|y|n|t|f|是|否|真|假|开|关)$/i
+};
+
+function isDateLike(s){
+  return RE.isoDate.test(s) || RE.slashDate.test(s) || RE.usDate.test(s) || RE.cnDate.test(s);
+}
+function hasTimePart(s){
+  return /\d{1,2}:\d{2}/.test(s);
+}
+function parseDate(s){
+  const t = s.replace(/[年月]/g, '-').replace(/[日]/g, '').replace(/\//g, '-').replace(' ', 'T');
+  const d = new Date(t);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+const NULL_TOKENS = new Set(['', 'na', 'n/a', 'null', 'none', 'nil', '-', '--', '#n/a', 'nan', 'undefined', '空']);
+const isNull = s => NULL_TOKENS.has(String(s).trim().toLowerCase());
+
+function inferType(vals){
+  // vals: 非空原始值数组
+  const n = vals.length;
+  if (!n) return { type: 'text', conf: 0 };
+
+  const freq = new Map();
+  let maxD = 0;
+  for (const v of vals){
+    const k = v.trim();
+    const c = (freq.get(k) || 0) + 1;
+    freq.set(k, c);
+    if (c > maxD) maxD = c;
+  }
+  const distinct = freq.size;
+
+  let intN = 0, floatN = 0, numN = 0, dateN = 0, dateWithTime = 0, boolN = 0,
+      emailN = 0, urlN = 0, uuidN = 0, ipN = 0;
+
+  for (let i = 0; i < n; i++){
+    const s = vals[i].trim();
+    // int / float 互斥计数，但都算「数值」——整数混小数的列仍是浮点
+    if (RE.int.test(s)) { intN++; numN++; }
+    else if (RE.float.test(s)) { floatN++; numN++; }
+    if (RE.boolWord.test(s)) boolN++;
+    if (isDateLike(s)) { dateN++; if (hasTimePart(s)) dateWithTime++; }
+    if (RE.email.test(s)) emailN++;
+    if (RE.url.test(s)) urlN++;
+    if (RE.uuid.test(s)) uuidN++;
+    if (RE.ipv4.test(s)) ipN++;
+  }
+
+  const allP = k => k === n;
+  const nearP = k => k / n >= 0.95;
+
+  let type = 'text', conf = 1;
+
+  if (allP(uuidN))        { type = 'uuid'; }
+  else if (allP(emailN))  { type = 'email'; }
+  else if (allP(urlN))    { type = 'url'; }
+  else if (allP(ipN))     { type = 'ip'; }
+  else if (allP(intN))    { type = 'int'; }
+  else if (nearP(numN))   { type = 'float'; conf = allP(numN) ? 1 : 0.9; }
+  else if (allP(dateN))   { type = dateWithTime === n ? 'datetime' : (dateWithTime > 0 ? 'datetime' : 'date'); }
+  else if (nearP(dateN))  { type = dateWithTime > n/2 ? 'datetime' : 'date'; conf = 0.9; }
+  else if (allP(boolN) && distinct <= 2) { type = 'bool'; }
+  else if (distinct <= 1) { type = 'enum'; }
+  else if (distinct <= 24 && (n < 50 || distinct / n < 0.6) && maxD >= 2){
+    // 枚举：取值少，且至少有一个值重复出现。小样本放宽比例要求。
+    type = 'enum';
+    conf = (n < 50 || distinct / n < 0.15) ? 1 : 0.75;
+  }
+  else { type = 'text'; }
+
+  return { type, conf, distinct };
+}
+
+/* ============================================================
+   3. 列剖析
+   ============================================================ */
+function quantile(sorted, q){
+  if (!sorted.length) return NaN;
+  const p = (sorted.length - 1) * q;
+  const lo = Math.floor(p), hi = Math.ceil(p);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (p - lo);
+}
+
+function profileColumn(name, colVals, idx){
+  const total = colVals.length;
+  const missingIdx = [];
+  const vals = [];
+  for (let i = 0; i < total; i++){
+    const v = colVals[i];
+    if (isNull(v)) missingIdx.push(i); else vals.push(String(v));
+  }
+  const present = vals.length;
+  const missing = total - present;
+
+  const p = {
+    idx, name, total, present, missing,
+    missRate: total ? missing / total : 0,
+    blanks: 0, padWs: 0,
+    type: 'text', conf: 0, distinct: 0, uniqRate: 0,
+    top: [], numStats: null, strStats: null, dateStats: null,
+    anomalies: [], flags: []
+  };
+  if (!present){
+    p.type = 'empty';
+    p.flags.push({ level: 'bad', text: '整列为空' });
+    return p;
+  }
+
+  // 首尾空白 / 纯空白
+  for (const v of vals){
+    if (v.trim() === '') p.blanks++;
+    else if (v !== v.trim()) p.padWs++;
+  }
+
+  const inf = inferType(vals);
+  p.type = inf.type; p.conf = inf.conf || 1;
+
+  const freq = new Map();
+  for (const v of vals) freq.set(v, (freq.get(v) || 0) + 1);
+  p.distinct = freq.size;
+  p.uniqRate = p.distinct / present;
+  p.top = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)
+              .map(([v, c]) => ({ v, c, r: c / present }));
+  if (p.distinct <= 64) p.values = Array.from(freq.keys());   // 供 CHECK 约束使用，必须是全集
+
+  /* --- 数值统计 --- */
+  if (p.type === 'int' || p.type === 'float'){
+    const nums = [];
+    for (let i = 0; i < vals.length; i++){
+      const s = vals[i].trim().replace(/,/g, '');
+      const x = parseFloat(s);
+      if (isFinite(x)) nums.push(x);
+    }
+    if (nums.length){
+      const sorted = nums.slice().sort((a, b) => a - b);
+      const sum = nums.reduce((a, b) => a + b, 0);
+      const mean = sum / nums.length;
+      const q1 = quantile(sorted, 0.25), q3 = quantile(sorted, 0.75);
+      const iqr = q3 - q1;
+      const sd = Math.sqrt(nums.reduce((a, b) => a + (b - mean) * (b - mean), 0) / nums.length);
+      p.numStats = {
+        min: sorted[0], max: sorted[sorted.length - 1], mean, sd,
+        p05: quantile(sorted, .05), q1, med: quantile(sorted, .5), q3,
+        p95: quantile(sorted, .95), iqr,
+        zeros: nums.filter(x => x === 0).length,
+        negs: nums.filter(x => x < 0).length,
+        ints: nums.filter(x => Number.isInteger(x)).length
+      };
+      // 离群：IQR 温和界 + z-score
+      const loF = q1 - 1.5 * iqr, hiF = q3 + 1.5 * iqr;
+      const loX = q1 - 3 * iqr, hiX = q3 + 3 * iqr;
+      let mild = [], ext = [];
+      for (let i = 0; i < nums.length; i++){
+        const x = nums[i];
+        if (x < loX || x > hiX) ext.push(x);
+        else if (x < loF || x > hiF) mild.push(x);
+      }
+      if (ext.length) p.anomalies.push({ kind: '极端离群', level: 'bad', text: `${ext.length} 个值超出 Q1/Q3 ±3×IQR（例如 ${fmtNum(ext[0])}）` });
+      if (mild.length) p.anomalies.push({ kind: '离群', level: 'warn', text: `${mild.length} 个值超出 ±1.5×IQR（正常范围 ${fmtNum(loF)} ~ ${fmtNum(hiF)}）` });
+      if (p.numStats.negs) p.anomalies.push({ kind: '负值', level: 'warn', text: `${p.numStats.negs} 个负值，最小值 ${fmtNum(p.numStats.min)}` });
+      if (p.type === 'float' && p.numStats.ints === nums.length)
+        p.anomalies.push({ kind: '类型冗余', level: 'warn', text: '所有值都是整数，可用整型存储' });
+      if (p.numStats.zeros / nums.length > 0.5)
+        p.anomalies.push({ kind: '零膨胀', level: 'warn', text: pct(p.numStats.zeros / nums.length, 0) + ' 的值为 0' });
+    }
+  }
+
+  /* --- 日期统计 --- */
+  if (p.type === 'date' || p.type === 'datetime'){
+    const ds = [];
+    for (const v of vals){ const d = parseDate(v.trim()); if (d) ds.push(d.getTime()); }
+    if (ds.length){
+      const sorted = ds.slice().sort((a, b) => a - b);
+      const min = new Date(sorted[0]), max = new Date(sorted[sorted.length - 1]);
+      p.dateStats = { min, max, spanDays: Math.round((max - min) / 864e5) };
+      const yMin = min.getFullYear(), yMax = max.getFullYear();
+      if (yMin < 1900 || yMax > 2100)
+        p.anomalies.push({ kind: '日期越界', level: 'bad', text: `年份范围 ${yMin}–${yMax}，超出合理区间` });
+      const future = ds.filter(t => t > Date.now() + 864e5).length;
+      if (future) p.anomalies.push({ kind: '未来日期', level: 'warn', text: `${future} 个日期晚于今天` });
+    }
+  }
+
+  /* --- 字符串通用 --- */
+  const lens = vals.map(v => v.length);
+  p.strStats = {
+    minLen: Math.min.apply(null, lens),
+    maxLen: Math.max.apply(null, lens),
+    avgLen: lens.reduce((a, b) => a + b, 0) / lens.length
+  };
+
+  if (p.padWs) p.anomalies.push({ kind: '首尾空白', level: 'warn', text: `${p.padWs} 个值带首尾空格` });
+
+  // 大小写/归一化变体（同一语义多种写法）
+  if (p.type === 'enum' || p.type === 'text'){
+    const norm = new Map();
+    for (const v of vals){
+      const k = v.trim().toLowerCase().replace(/\s+/g, ' ');
+      if (!norm.has(k)) norm.set(k, new Set());
+      norm.get(k).add(v);
+    }
+    const variants = [];
+    norm.forEach((set, k) => { if (set.size > 1) variants.push(Array.from(set)); });
+    if (variants.length){
+      p.caseVariants = variants.slice(0, 5);
+      p.anomalies.push({
+        kind: '写法不一致', level: 'bad',
+        text: `${variants.length} 组值只是大小写/空格不同，实为同一取值（如 ${variants[0].slice(0, 3).map(x => '"' + x + '"').join(' / ')}）`
+      });
+    }
+    // 稀有值
+    if (p.type === 'enum'){
+      const rare = p.top.filter(t => t.c === 1).length;
+      const once = Array.from(freq.values()).filter(c => c === 1).length;
+      if (once && once / p.distinct > 0.5 && p.distinct > 6)
+        p.anomalies.push({ kind: '长尾取值', level: 'warn', text: `${once}/${p.distinct} 个取值只出现 1 次` });
+      void rare;
+    }
+  }
+
+  // 混合格式（数字写作多种形式）
+  if (p.type !== 'int' && p.type !== 'float'){
+    const numeric = vals.filter(v => RE.numLike.test(v.trim())).length;
+    if (numeric / present > 0.3 && numeric < present)
+      p.anomalies.push({ kind: '格式混写', level: 'warn', text: `${numeric}/${present} 个值其实是数字，混在文本列里` });
+  }
+
+  if (p.missRate > 0) p.flags.push({ level: p.missRate > 0.5 ? 'bad' : 'warn', text: '缺失 ' + pct(p.missRate, 1) });
+  if (p.distinct === 1) p.flags.push({ level: 'warn', text: '常量列' });
+
+  return p;
+}
+
+/* ============================================================
+   4. 函数依赖发现
+   ============================================================ */
+function buildCodes(values, norm){
+  // 值 → 整数编码；null 统一为 -1。norm 可选，用于「忽略大小写/空格」的归一化编码
+  const map = new Map();
+  const codes = new Int32Array(values.length);
+  for (let i = 0; i < values.length; i++){
+    let k = values[i];
+    if (isNull(k)) { codes[i] = -1; continue; }
+    k = String(k);
+    if (norm) k = norm(k);
+    let c = map.get(k);
+    if (c === undefined){ c = map.size; map.set(k, c); }
+    codes[i] = c;
+  }
+  return { codes, distinct: map.size };
+}
+const normKey = s => String(s).trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * 检验 det(列 idx 数组) → dep(列 idx)
+ * 返回 { exact, violRows, violPairs }
+ * 做法：按 det 的取值组合分桶，每桶内统计 dep 的取值分布；
+ *       违反行 = 总行数 - Σ(每桶内 dep 的众数计数)
+ */
+function checkFD(detCodes, depCode, n){
+  const buckets = new Map();
+  const det = detCodes;
+  const k = det.length;
+  for (let i = 0; i < n; i++){
+    let key;
+    if (k === 1) key = det[0][i];
+    else { key = ''; for (let j = 0; j < k; j++) key += det[j][i] + '\u0001'; }
+    let b = buckets.get(key);
+    if (!b) { b = new Map(); buckets.set(key, b); }
+    const v = depCode[i];
+    b.set(v, (b.get(v) || 0) + 1);
+  }
+  let dominant = 0, conflicts = 0;
+  buckets.forEach(b => {
+    let mx = 0, sum = 0;
+    b.forEach(c => { if (c > mx) mx = c; sum += c; });
+    dominant += mx;
+    if (b.size > 1) conflicts++;
+  });
+  const violRows = n - dominant;
+  return { exact: violRows === 0, violRows, conflicts, buckets: buckets.size };
+}
+
+function findDependencies(profiles, cols, n, maxLevel, allCodes, numericSet, allNormCodes){
+  // cols: 参与分析的列 idx；allCodes: 每列的 Int32Array 编码
+  // numericSet: 数值列 idx 集合 —— 维度 ≥3 时只在数值列里搜（派生列几乎都是数值算出来的）
+  const deps = [];
+  const isUnique = new Set();
+  profiles.forEach(p => { if (p.distinct === p.present && p.present > 1) isUnique.add(p.idx); });
+
+  const combos = (arr, k) => {
+    const out = [];
+    const rec = (start, cur) => {
+      if (cur.length === k){ out.push(cur.slice()); return; }
+      for (let i = start; i < arr.length; i++){ cur.push(arr[i]); rec(i + 1, cur); cur.pop(); }
+    };
+    rec(0, []);
+    return out;
+  };
+
+  const MAX_COMBO = 4000;
+  let scanned = 0;
+
+  for (const y of cols){
+    if (isUnique.has(y) && maxLevel < 1) continue;
+    const depCode = allCodes[y];
+    const solved = new Set();
+
+    for (let lvl = 1; lvl <= maxLevel; lvl++){
+      if (lvl === 1){
+        for (const x of cols){
+          if (x === y) continue;
+          if (isUnique.has(y) && !isUnique.has(x)) continue; // 唯一列只能被键决定
+          const r = checkFD([allCodes[x]], depCode, n);
+          scanned++;
+          // 高基数剪枝：X 的桶数若超过行数一半，平均每个桶不到 2 行，
+          // 这时的 X→Y 是过拟合的巧合而非结构（唯一的例外是 X 本身就是键）
+          const weak = r.buckets < n && r.buckets / n > 0.5;
+          if (r.exact) { deps.push({ det: [x], dep: y, viol: 0, trivial: isUnique.has(x), weak }); solved.add(x); }
+          else if (r.violRows > 0){
+            // 归一化（忽略大小写/空格）后成立 → 只是写法不统一，语义上仍是依赖
+            let cause = null;
+            if (allNormCodes){
+              const rn = checkFD([allNormCodes[x]], allNormCodes[y], n);
+              if (rn.exact) cause = '写法差异';
+            }
+            const tol = Math.max(2, n * 0.05);
+            if (cause) deps.push({ det: [x], dep: y, viol: r.violRows, trivial: isUnique.has(x), approx: true, cause });
+          }
+        }
+      } else {
+        let pool = cols.filter(x => x !== y && !solved.has(x));
+        // 深度 ≥3 时只在数值列里找（对象也必须是数值），否则组合数爆炸
+        if (lvl >= 3){
+          if (!numericSet || !numericSet.has(y)) break;
+          pool = pool.filter(x => numericSet.has(x));
+        }
+        if (pool.length < lvl) break;
+        let cs = combos(pool, lvl);
+        if (cs.length > MAX_COMBO){
+          // 优先保留基数小的列组合，避免爆炸
+          cs.sort((a, b) => {
+            const sa = a.reduce((s, i) => s + profiles[i].distinct, 0);
+            const sb = b.reduce((s, i) => s + profiles[i].distinct, 0);
+            return sa - sb;
+          });
+          cs = cs.slice(0, MAX_COMBO);
+        }
+        for (const c of cs){
+          const r = checkFD(c.map(i => allCodes[i]), depCode, n);
+          scanned++;
+          if (r.exact){
+            const weak = r.buckets < n && r.buckets / n > 0.5;
+            // 桶数等于行数说明该组合本身就是键 → 平凡依赖
+            deps.push({ det: c.slice(), dep: y, viol: 0, trivial: r.buckets === n, weak });
+            c.forEach(x => solved.add(x));
+          }
+        }
+      }
+    }
+  }
+  deps.sort((a, b) => (a.viol - b.viol) || (a.det.length - b.det.length));
+  return { deps, scanned, uniques: isUnique };
+}
+
+/* ============================================================
+   5. 候选键
+   ============================================================ */
+function findKeys(profiles, cols, n, allCodes, maxLevel){
+  const keys = [];
+  const inKey = new Set();
+  const isKey = combo => {
+    const seen = new Set();
+    for (let i = 0; i < n; i++){
+      let key;
+      if (combo.length === 1) key = allCodes[combo[0]][i];
+      else { key = ''; for (const c of combo) key += allCodes[c][i] + '\u0001'; }
+      if (seen.has(key)) return false;
+      seen.add(key);
+    }
+    return true;
+  };
+  const combos = (arr, k) => {
+    const out = [];
+    const rec = (start, cur) => {
+      if (cur.length === k){ out.push(cur.slice()); return; }
+      for (let i = start; i < arr.length; i++){ cur.push(arr[i]); rec(i + 1, cur); cur.pop(); }
+    };
+    rec(0, []);
+    return out;
+  };
+
+  for (let lvl = 1; lvl <= Math.min(maxLevel, 3); lvl++){
+    if (lvl > 1 && keys.length) break;
+    let cs = combos(cols, lvl);
+    if (cs.length > 600){
+      cs.sort((a, b) => {
+        const sa = a.reduce((s, i) => s + profiles[i].distinct, 0);
+        const sb = b.reduce((s, i) => s + profiles[i].distinct, 0);
+        return sa - sb;
+      });
+      cs = cs.slice(0, 600);
+    }
+    for (const c of cs){
+      if (c.some(x => inKey.has(x))) continue; // 超集剪枝
+      if (isKey(c)){ keys.push(c); c.forEach(x => inKey.add(x)); }
+    }
+  }
+  keys.sort((a, b) => (a.length - b.length) || (a.reduce((s,i)=>s+profiles[i].distinct,0) - b.reduce((s,i)=>s+profiles[i].distinct,0)));
+  return keys;
+}
+
+/* ============================================================
+   6. 相关性（Pearson / 归一化互信息）
+   ============================================================ */
+function pearson(a, b){
+  // 跳过缺失（NaN）
+  let n = 0, sa = 0, sb = 0;
+  for (let i = 0; i < a.length; i++){
+    if (!isFinite(a[i]) || !isFinite(b[i])) continue;
+    n++; sa += a[i]; sb += b[i];
+  }
+  if (n < 3) return 0;
+  const ma = sa / n, mb = sb / n;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++){
+    if (!isFinite(a[i]) || !isFinite(b[i])) continue;
+    const x = a[i] - ma, y = b[i] - mb;
+    num += x * y; da += x * x; db += y * y;
+  }
+  const den = Math.sqrt(da * db);
+  return den === 0 ? 0 : num / den;
+}
+function entropy(counts, n){
+  let h = 0;
+  counts.forEach(c => { if (c > 0){ const p = c / n; h -= p * Math.log2(p); } });
+  return h;
+}
+function nmi(ca, cb, n){
+  const joint = new Map(), ma = new Map(), mb = new Map();
+  for (let i = 0; i < n; i++){
+    const k = ca[i] + '\u0001' + cb[i];
+    joint.set(k, (joint.get(k) || 0) + 1);
+    ma.set(ca[i], (ma.get(ca[i]) || 0) + 1);
+    mb.set(cb[i], (mb.get(cb[i]) || 0) + 1);
+  }
+  const ha = entropy(ma, n), hb = entropy(mb, n);
+  if (ha === 0 || hb === 0) return 0;
+  const hij = entropy(joint, n);
+  return clamp((ha + hb - hij) / Math.sqrt(ha * hb), 0, 1);
+}
+function corrMatrix(profiles, cols, n, allCodes, numericVals){
+  const m = cols.map(() => cols.map(() => 0));
+  const numeric = new Set();
+  profiles.forEach(p => { if (p.type === 'int' || p.type === 'float') numeric.add(p.idx); });
+  void allCodes;
+
+  for (let a = 0; a < cols.length; a++){
+    for (let b = a; b < cols.length; b++){
+      const ia = cols[a], ib = cols[b];
+      let v;
+      if (a === b) v = 1;
+      else if (numeric.has(ia) && numeric.has(ib)) v = Math.abs(pearson(numericVals.get(ia), numericVals.get(ib)));
+      else v = nmi(allCodes[ia], allCodes[ib], n);
+      m[a][b] = m[b][a] = v;
+    }
+  }
+  return { m, numeric };
+}
+
+/* ============================================================
+   7. 缺失模式
+   ============================================================ */
+function buildMissingMatrix(colValues, n){
+  return colValues.map(col => {
+    const bits = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (isNull(col[i])) bits[i] = 1;
+    return bits;
+  });
+}
+function missingPatterns(mm, n, cols){
+  const freq = new Map();
+  let any = false;
+  for (let i = 0; i < n; i++){
+    let k = '';
+    for (let j = 0; j < cols.length; j++){
+      const b = mm[cols[j]][i];
+      k += b;
+      if (b) any = true;
+    }
+    freq.set(k, (freq.get(k) || 0) + 1);
+  }
+  if (!any) return [];
+  return Array.from(freq.entries())
+    .map(([k, c]) => ({ pat: k.split('').map(Number), count: c, share: c / n }))
+    .filter(x => x.pat.includes(1))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+}
+
+/* ============================================================
+   8. 示例数据
+   ============================================================ */
+function buildSample(){
+  const cities = [
+    ['深圳', '中国'], ['上海', '中国'], ['北京', '中国'],
+    ['Singapore', 'Singapore'], ['Berlin', 'Germany'], ['Austin', 'USA']
+  ];
+  const names = ['Alice Chen','Bob Li','Carol Wang','David Zhang','Eve Liu','Frank Zhao','Grace Sun','Henry Xu','Ivy Tan','Jack Ma'];
+  const cust = [];
+  for (let i = 1; i <= 24; i++){
+    const c = cities[i % cities.length];
+    cust.push({
+      id: 'C' + (1000 + i),
+      name: names[i % names.length],
+      email: 'user' + i + '@' + ['qq.com','gmail.com','163.com','outlook.com'][i % 4],
+      signup: '2024-' + String(1 + (i % 12)).padStart(2, '0') + '-' + String(1 + (i % 27)).padStart(2, '0'),
+      city: c[0], country: c[1]
+    });
+  }
+  const status = ['paid', 'shipped', 'pending', 'refunded', 'cancelled'];
+  const channel = ['web', 'app', 'wechat', 'partner'];
+  const prices = [19.9, 39.0, 128.5, 299.0, 15.0];
+  const N = 260;
+  const head = ['order_id','customer_id','customer_name','email','city','country','signup_date',
+                'order_date','ship_date','channel','status','unit_price','quantity','discount','total','coupon','rating','notes'];
+  const rows = [head];
+  for (let k = 0; k < N; k++){
+    const c = cust[k % cust.length];
+    let name = c.name;
+    if (k % 37 === 5) name = c.name.toUpperCase();      // 脏：大小写变体
+    if (k % 53 === 7) name = ' ' + c.name + ' ';        // 脏：首尾空格
+    // quantity 取 k%7、unit_price 取 k%5 —— 周期互质，避免「单价就能决定数量」
+    // 这种巧合，好让 total 只能由三列联合决定
+    const qty = 1 + (k % 7);
+    let price = prices[k % 5];
+    if (k === 17) price = 99999;                        // 极端离群
+    if (k === 91) price = -5;                           // 负值
+    const disc = (k % 7 === 0) ? 0.2 : (k % 11 === 0 ? 0.1 : 0);
+    const total = +(qty * price * (1 - disc)).toFixed(2);
+    const st = status[k % status.length];
+    const od = new Date(Date.UTC(2025, 0, 1 + (k % 300)));
+    const iso = od.toISOString().slice(0, 10);
+    const ship = (st === 'pending' || st === 'cancelled') ? '' : iso;
+    const coupon = (k % 7 === 0) ? 'SAVE20' : (k % 11 === 0 ? 'TEN' : '');
+    const rating = (k % 3 === 0) ? '' : String(1 + ((k * 7) % 5));
+    const notes = (k % 9 === 0) ? 'gift wrap' : '';
+    rows.push([
+      'O' + (10001 + k), c.id, name, c.email, c.city, c.country, c.signup,
+      iso, ship, channel[Math.floor(k / 7) % 4], st,
+      price.toFixed(2), String(qty), disc.toFixed(2), total.toFixed(2), coupon, rating, notes
+    ]);
+  }
+  return rows.map(r => r.map(v => (/[",\n]/.test(v) ? '"' + v + '"' : v)).join(',')).join('\n');
+}
+
+/* ============================================================
+   9. 分析编排
+   ============================================================ */
+function analyze(text, opt){
+  const delim = opt.delim === 'auto' ? detectDelim(text) : opt.delim;
+  const parsed = parseDelimited(text, delim, opt.hdr);
+  if (!parsed.rows.length) throw new Error('没解析出任何数据行，检查一下分隔符或表头设置');
+  if (parsed.header.length < 2) throw new Error('至少需要 2 列才能分析依赖关系');
+
+  let rows = parsed.rows;
+  const cap = clamp(parseInt(opt.cap, 10) || 4000, 100, 200000);
+  const sampled = rows.length > cap;
+  if (sampled) rows = rows.slice(0, cap);
+  const n = rows.length;
+  const header = parsed.header;
+
+  const colValues = header.map((h, ci) => rows.map(r => r[ci]));
+  const profiles  = colValues.map((cv, i) => profileColumn(header[i], cv, i));
+  const cols      = profiles.filter(p => p.type !== 'empty').map(p => p.idx);
+  if (cols.length < 2) throw new Error('有效列不足 2 个');
+
+  const allCodes = colValues.map(cv => buildCodes(cv).codes);
+  const allNormCodes = colValues.map(cv => buildCodes(cv, normKey).codes);
+  const maxLevel = clamp(parseInt(opt.lvl, 10) || 2, 1, 3);
+  const numericSet = new Set(profiles.filter(p => p.type === 'int' || p.type === 'float').map(p => p.idx));
+
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const fd = findDependencies(profiles, cols, n, maxLevel, allCodes, numericSet, allNormCodes);
+  const keys = findKeys(profiles, cols, n, allCodes, Math.min(maxLevel, 2));
+
+  // Pearson 必须用原始数值，不能用编码
+  const numericVals = new Map();
+  numericSet.forEach(i => {
+    const arr = new Float64Array(n);
+    for (let k = 0; k < n; k++){
+      const s = String(colValues[i][k]).trim().replace(/,/g, '');
+      const x = isNull(s) ? NaN : parseFloat(s);
+      arr[k] = isFinite(x) ? x : NaN;
+    }
+    numericVals.set(i, arr);
+  });
+
+  const corr = corrMatrix(profiles, cols, n, allCodes, numericVals);
+  const mm = buildMissingMatrix(colValues, n);
+  const mpats = missingPatterns(mm, n, cols);
+  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+  // 冗余列：可由其它列完全决定的列
+  const derivable = new Map();
+  fd.deps.forEach(d => {
+    if (d.viol === 0 && !d.trivial && !d.weak){
+      if (!derivable.has(d.dep)) derivable.set(d.dep, []);
+      derivable.get(d.dep).push(d.det);
+    }
+  });
+
+  const totalCells = n * header.length;
+  const missingCells = profiles.reduce((s, p) => s + p.missing, 0);
+
+  return {
+    header, rows, n, sampled, cap, delim, profiles, cols, allCodes, maxLevel,
+    deps: fd.deps, uniques: fd.uniques, keys, corr, mm, mpats, derivable,
+    totalCells, missingCells, missRate: totalCells ? missingCells / totalCells : 0,
+    ms: Math.round(t1 - t0),
+    anomalies: collectAnomalies(profiles)
+  };
+}
+
+function collectAnomalies(profiles){
+  const out = [];
+  profiles.forEach(p => p.anomalies.forEach(a => out.push({ col: p.name, idx: p.idx, kind: a.kind, level: a.level, text: a.text })));
+  const order = { bad: 0, warn: 1 };
+  out.sort((a, b) => order[a.level] - order[b.level]);
+  return out;
+}
+
+/* ============================================================
+   10. 渲染 — 概览
+   ============================================================ */
+function typeLabel(t){
+  return ({ int:'整型', float:'浮点', bool:'布尔', date:'日期', datetime:'时间',
+            email:'邮箱', url:'URL', uuid:'UUID', ip:'IP', enum:'枚举', text:'文本', empty:'空' })[t] || t;
+}
+function typeBadge(t){
+  const cls = 'b-' + (t === 'uuid' || t === 'ip' ? 'uuid' : t);
+  return '<span class="badge ' + cls + '">' + esc(typeLabel(t)) + '</span>';
+}
+function heatColor(v){
+  // 0 → 冷灰，1 → 深靛
+  if (!isFinite(v)) return '#f3f4f6';
+  const t = clamp(v, 0, 1);
+  const r = Math.round(247 - 148 * t), g = Math.round(248 - 150 * t), b = Math.round(250 - 96 * t);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+function renderStats(R){
+  const pk = R.keys.length ? R.keys[0].map(i => R.header[i]).join(' + ') : '未发现';
+  const dupRows = R.n - (R.keys.length ? R.n : 0);
+  const stats = [
+    ['数据行', fmtNum(R.n), R.sampled ? '采样自 ' + fmtNum(R.rows.length) + ' 行' : '全部参与计算'],
+    ['列数', String(R.header.length), R.cols.length < R.header.length ? (R.header.length - R.cols.length) + ' 列全空' : '无全空列'],
+    ['单元格', fmtNum(R.totalCells), '缺失 ' + pct(R.missRate, 2)],
+    ['候选键', R.keys.length ? String(R.keys.length) : '0', pk],
+    ['函数依赖', String(R.deps.filter(d => d.viol === 0).length), '其中近似 ' + R.deps.filter(d => d.viol > 0).length + ' 条'],
+    ['可派生列', String(R.derivable.size), '值完全由别的列决定'],
+    ['质量告警', String(R.anomalies.length), '严重 ' + R.anomalies.filter(a => a.level === 'bad').length + ' 条'],
+    ['耗时', R.ms + 'ms', '维度上限 ' + R.maxLevel + ' 列']
+  ];
+  $('#stats').innerHTML = stats.map(([k, v, s]) =>
+    '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'
+  ).join('');
+  $('#ovHint').textContent = R.sampled
+    ? '行数超过上限，只取前 ' + fmtNum(R.n) + ' 行参与依赖计算'
+    : '分隔符「' + (R.delim === '\t' ? 'Tab' : R.delim) + '」· ' + R.n + ' 行 × ' + R.header.length + ' 列';
+  void dupRows;
+}
+
+/* ============================================================
+   11. 渲染 — 列剖面
+   ============================================================ */
+function renderCols(R){
+  const inKey = new Set();
+  if (R.keys.length) R.keys[0].forEach(i => inKey.add(i));
+  const derivSet = R.derivable;
+
+  $('#colGrid').innerHTML = R.profiles.map(p => {
+    const cls = ['col'];
+    if (inKey.has(p.idx)) cls.push('pk');
+    const badges = [typeBadge(p.type)];
+    if (inKey.has(p.idx)) badges.push('<span class="badge b-pk">主键</span>');
+    else if (p.distinct === p.present && p.present > 1) badges.push('<span class="badge b-uq">唯一</span>');
+    if (p.missing) badges.push('<span class="badge b-null">缺失 ' + pct(p.missRate, 0) + '</span>');
+    if (derivSet.has(p.idx)) badges.push('<span class="badge b-warn">可派生</span>');
+
+    let body = '';
+    if (p.type === 'empty'){
+      body = '<div class="flag bad">整列无值，建议删除</div>';
+    } else {
+      const uniqPct = p.uniqRate;
+      body +=
+        '<div class="meter"><i style="width:' + (uniqPct * 100).toFixed(1) + '%;background:#4f46e5"></i></div>' +
+        '<div class="mlab"><span>基数 ' + fmtNum(p.distinct) + '</span><span>唯一率 ' + pct(uniqPct, 1) + '</span></div>';
+
+      if (p.missing){
+        body += '<div class="meter"><i style="width:' + (p.missRate * 100).toFixed(1) + '%;background:#dc2626"></i></div>' +
+                '<div class="mlab"><span>缺失</span><span>' + fmtNum(p.missing) + ' / ' + fmtNum(p.total) + '</span></div>';
+      }
+
+      if (p.numStats){
+        const s = p.numStats;
+        body += '<div class="kv">范围 <b>' + fmtNum(s.min) + '</b> ~ <b>' + fmtNum(s.max) + '</b>' +
+                ' · 中位 <b>' + fmtNum(s.med) + '</b> · 均值 <b>' + fmtNum(s.mean) + '</b></div>';
+        body += '<div class="kv">四分位 ' + fmtNum(s.q1) + ' / ' + fmtNum(s.q3) + ' · 标准差 ' + fmtNum(s.sd) + '</div>';
+      } else if (p.dateStats){
+        const d = p.dateStats;
+        const f = x => x.toISOString().slice(0, 10);
+        body += '<div class="kv">' + f(d.min) + ' → ' + f(d.max) + ' · 跨度 <b>' + fmtNum(d.spanDays) + '</b> 天</div>';
+      } else {
+        body += '<div class="kv">长度 ' + p.strStats.minLen + '–' + p.strStats.maxLen +
+                ' · 均值 ' + p.strStats.avgLen.toFixed(1) + '</div>';
+      }
+
+      if (p.top.length && p.type !== 'float'){
+        body += '<div class="topv">' + p.top.slice(0, 5).map(t =>
+          '<span title="' + esc(t.v) + '">' + esc(t.v.length > 18 ? t.v.slice(0, 17) + '…' : t.v) + ' <b>' + t.c + '</b></span>'
+        ).join('') + '</div>';
+      }
+
+      if (derivSet.has(p.idx)){
+        const ds = derivSet.get(p.idx).map(d => d.map(i => R.header[i]).join('+')).slice(0, 2).join(' 或 ');
+        body += '<div class="flag">可由 <b>' + esc(ds) + '</b> 完全决定 —— 冗余存储</div>';
+      }
+      p.anomalies.slice(0, 3).forEach(a => {
+        body += '<div class="flag ' + (a.level === 'bad' ? 'bad' : '') + '">' + esc(a.kind) + '：' + esc(a.text) + '</div>';
+      });
+    }
+    return '<div class="' + cls.join(' ') + '"><div class="col-h"><span class="cname">' + esc(p.name) + '</span>' +
+           badges.join('') + '</div>' + body + '</div>';
+  }).join('');
+}
+
+/* ============================================================
+   12. 渲染 — 依赖
+   ============================================================ */
+function renderDeps(R){
+  // weak = 决定因子基数过高，属于过拟合巧合，不作为结论输出
+  const exact = R.deps.filter(d => d.viol === 0 && !d.weak);
+  const approx = R.deps.filter(d => d.viol > 0 && !d.weak);
+  const weakN = R.deps.length - exact.length - approx.length;
+  const nonTrivial = exact.filter(d => !d.trivial);
+  $('#depHint').textContent = exact.length + ' 条精确依赖（' + nonTrivial.length + ' 条非平凡）· ' +
+                              approx.length + ' 条近似依赖' +
+                              (weakN ? ' · 已忽略 ' + weakN + ' 条高基数巧合' : '') +
+                              ' · 扫描 ' + fmtNum(R.n) + ' 行';
+
+  const box = $('#depList');
+  if (!exact.length && !approx.length){
+    box.innerHTML = '<div class="empty">没找到函数依赖。数据可能每行都独立，或者把「依赖维度」调高再试。</div>';
+    return;
+  }
+  const card = d => {
+    const cls = d.viol > 0 ? 'p-approx' : (d.trivial ? 'p-trivial' : 'p-exact');
+    const label = d.viol > 0 ? '近似' : (d.trivial ? '平凡（键决定列）' : '精确');
+    const det = d.det.map(i => '<span class="chip' + (d.trivial ? ' k' : '') + '">' + esc(R.header[i]) + '</span>').join(' + ');
+    const dep = '<span class="chip">' + esc(R.header[d.dep]) + '</span>';
+    const meta = d.viol > 0
+      ? (d.cause ? '忽略大小写/空格后完全成立 —— <b>' + esc(d.cause) + '</b> 导致 ' + d.viol + ' 行表面违反'
+                 : '有 ' + d.viol + ' 行不服从（' + pct(d.viol / R.n, 2) + '），通常是脏数据造成')
+      : (d.det.length > 1 ? '需 ' + d.det.length + ' 列联合才能决定' : '单列即可决定');
+    return '<div class="dep"><div class="dep-h">' + det + '<span class="arrow">→</span>' + dep +
+           '<span class="pill ' + cls + '">' + label + '</span></div>' +
+           '<div class="dep-m">' + esc(meta) + '</div></div>';
+  };
+  // 非平凡优先，然后按决定因子列数
+  const order = a => (a.trivial ? 1 : 0) * 1000 + a.det.length;
+  box.innerHTML =
+    nonTrivial.slice().sort((a, b) => order(a) - order(b)).slice(0, 40).map(card).join('') +
+    (approx.length ? '<div class="note warn" style="margin-top:14px">近似依赖（' + Math.min(approx.length, 12) + ' 条）</div>' +
+      approx.slice().sort((a, b) => a.viol - b.viol).slice(0, 12).map(card).join('') : '') +
+    (exact.length > 40 ? '<div class="empty">仅显示前 40 条，完整清单见 Markdown 报告</div>' : '');
+}
+
+/* 依赖分层图 */
+function renderGraph(R){
+  const pairs = R.deps.filter(d => d.det.length === 1 && d.viol === 0 && !d.trivial);
+  const involved = new Set();
+  pairs.forEach(d => { involved.add(d.det[0]); involved.add(d.dep); });
+  const nodes = Array.from(involved);
+  const box = $('#depGraph');
+
+  if (nodes.length < 2){
+    box.innerHTML = '<div class="empty">没有非平凡的单列依赖，画不出图。</div>';
+    return;
+  }
+
+  // 分层：入边决定层级
+  const level = new Map(nodes.map(i => [i, 0]));
+  for (let it = 0; it < nodes.length + 2; it++){
+    let moved = false;
+    pairs.forEach(d => {
+      const want = (level.get(d.det[0]) || 0) + 1;
+      if (want > (level.get(d.dep) || 0)){ level.set(d.dep, want); moved = true; }
+    });
+    if (!moved) break;
+  }
+  const layers = new Map();
+  nodes.forEach(i => {
+    const l = level.get(i) || 0;
+    if (!layers.has(l)) layers.set(l, []);
+    layers.get(l).push(i);
+  });
+  const layerKeys = Array.from(layers.keys()).sort((a, b) => a - b);
+  const maxInLayer = Math.max.apply(null, layerKeys.map(l => layers.get(l).length));
+
+  const LW = 148, NH = 26, VGAP = 15, HGAP = 62;
+  const W = layerKeys.length * (LW + HGAP) + 40;
+  const H = maxInLayer * (NH + VGAP) + 50;
+  const pos = new Map();
+  layerKeys.forEach((l, li) => {
+    const arr = layers.get(l);
+    arr.forEach((idx, k) => {
+      const x = 20 + li * (LW + HGAP);
+      const y = 25 + (k + 0.5) * (NH + VGAP) + (maxInLayer - arr.length) * (NH + VGAP) / 2;
+      pos.set(idx, { x, y });
+    });
+  });
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" id="depSvg" font-family="ui-monospace,Menlo,Consolas,monospace">';
+  svg += '<defs><marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto">' +
+         '<path d="M0,0 L6,3 L0,6 z" fill="#9ca3af"/></marker></defs>';
+  pairs.forEach(d => {
+    const a = pos.get(d.det[0]), b = pos.get(d.dep);
+    if (!a || !b) return;
+    const x1 = a.x + LW, y1 = a.y + NH / 2, x2 = b.x, y2 = b.y + NH / 2;
+    const mx = (x1 + x2) / 2;
+    svg += '<path d="M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2 +
+           '" fill="none" stroke="#c7cbd1" stroke-width="1.4" marker-end="url(#ah)"/>';
+  });
+  nodes.forEach(i => {
+    const p = pos.get(i);
+    const isSrc = pairs.some(d => d.det[0] === i);
+    const isTgt = pairs.some(d => d.dep === i);
+    const fill = isSrc && isTgt ? '#eef2ff' : (isSrc ? '#f5f3ff' : '#ffffff');
+    const stroke = isSrc && isTgt ? '#a5b4fc' : (isSrc ? '#c4b5fd' : '#e5e7eb');
+    const name = R.header[i];
+    const label = name.length > 17 ? name.slice(0, 16) + '…' : name;
+    svg += '<g><rect x="' + p.x + '" y="' + p.y + '" width="' + LW + '" height="' + NH +
+           '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.2"/>' +
+           '<text x="' + (p.x + 9) + '" y="' + (p.y + 17) + '" font-size="11.5" fill="#111827">' + esc(label) + '</text></g>';
+  });
+  svg += '</svg>';
+  box.innerHTML = svg +
+    '<div class="legend"><span><i style="background:#f5f3ff;border:1px solid #c4b5fd"></i>决定方</span>' +
+    '<span><i style="background:#ffffff;border:1px solid #e5e7eb"></i>被决定方</span>' +
+    '<span><i style="background:#eef2ff;border:1px solid #a5b4fc"></i>两者都是</span>' +
+    '<span>共 ' + pairs.length + ' 条非平凡单列依赖</span></div>';
+}
+
+/* 候选键 */
+function renderKeys(R){
+  const box = $('#keyList');
+  if (!R.keys.length){
+    box.innerHTML = '<div class="note warn">没有找到能唯一标识一行的列组合 —— 数据里存在完全重复的行。' +
+      '如果要建表，建议先加一个自增主键。</div>';
+    return;
+  }
+  const m = R.n;
+  box.innerHTML = R.keys.slice(0, 8).map((k, i) => {
+    const chips = k.map(x => '<span class="chip' + (i === 0 ? ' k' : '') + '">' + esc(R.header[x]) + '</span>').join(' + ');
+    const extra = i === 0 ? '<span class="pill p-exact">推荐主键</span>' : '';
+    return '<div class="dep"><div class="dep-h">' + chips + extra + '</div>' +
+      '<div class="dep-m">' + k.length + ' 列组合 · 唯一标识全部 ' + fmtNum(m) + ' 行</div></div>';
+  }).join('') + (R.keys.length > 8 ? '<div class="empty">还有 ' + (R.keys.length - 8) + ' 个候选组合未列出</div>' : '');
+}
+
+/* 相关性热力图 */
+function renderCorr(R){
+  const cols = R.cols;
+  const box = $('#corrBox');
+  if (cols.length > 40){
+    box.innerHTML = '<div class="empty">列数超过 40，跳过相关性矩阵。</div>';
+    return;
+  }
+  const { m } = R.corr;
+  let h = '<div class="scroll" style="max-height:none;overflow-x:auto"><table class="heat"><tr><th class="lbl"></th>';
+  cols.forEach((c, j) => { h += '<th class="lbl" style="text-align:center">' + esc(R.header[c].slice(0, 8)) + '</th>'; });
+  h += '</tr>';
+  for (let a = 0; a < cols.length; a++){
+    h += '<tr><th class="lbl">' + esc(R.header[cols[a]].slice(0, 14)) + '</th>';
+    for (let b = 0; b < cols.length; b++){
+      const v = m[a][b];
+      if (a === b){ h += '<td class="diag">·</td>'; continue; }
+      h += '<td title="' + esc(R.header[cols[a]] + ' × ' + R.header[cols[b]] + ' = ' + v.toFixed(3)) + '" style="background:' +
+           heatColor(v) + '">' + (v >= 0.995 ? '1' : v.toFixed(2).replace(/^0/, '')) + '</td>';
+    }
+    h += '</tr>';
+  }
+  h += '</table></div>';
+  h += '<div class="legend"><span>颜色越深表示两列越"互相可预测"：数值列取 |Pearson r|，其它列取归一化互信息。</span>' +
+       '<span>接近 1 的一对列，通常意味着其中一列是多余的。</span></div>';
+  box.innerHTML = h;
+}
+
+/* ============================================================
+   13. 渲染 — 质量
+   ============================================================ */
+function renderQuality(R){
+  /* 缺失模式 */
+  const mb = $('#missBox');
+  if (!R.mpats.length){
+    mb.innerHTML = '<div class="empty">没有缺失值。</div>';
+  } else {
+    const cols = R.cols;
+    let h = '<div class="note">每一横条是一种缺失组合，红色表示该列为空。' +
+            '如果某几列总是一起空着，它们通常属于另一张（可选关联）表。</div>';
+    h += '<div style="font-size:11px;color:var(--ink3);margin-bottom:8px" class="mpat"><span class="cnt">行数</span>' +
+         '<span class="grid" style="margin-left:88px">' + cols.map(c =>
+           '<i title="' + esc(R.header[c]) + '" style="background:#f3f4f6"></i>').join('') + '</span></div>';
+    h += R.mpats.map(p => {
+      const cells = cols.map((c, i) => '<i class="' + (p.pat[i] ? 'm' : '') + '" title="' + esc(R.header[c]) + '"></i>').join('');
+      const names = cols.filter((c, i) => p.pat[i]).map(c => R.header[c]).join(', ');
+      return '<div class="mpat"><span class="cnt">' + fmtNum(p.count) + ' 行</span>' +
+             '<span class="pct">' + pct(p.share, 1) + '</span>' +
+             '<span class="grid">' + cells + '</span>' +
+             '<span style="color:var(--ink3)">' + esc(names) + '</span></div>';
+    }).join('');
+    mb.innerHTML = h;
+  }
+
+  /* 告警表 */
+  const tb = $('#anTbl');
+  if (!R.anomalies.length){
+    $('#anHint').textContent = '没发现明显问题';
+    tb.innerHTML = '<tr><td class="empty">干净。</td></tr>';
+    return;
+  }
+  const bad = R.anomalies.filter(a => a.level === 'bad').length;
+  $('#anHint').textContent = R.anomalies.length + ' 条（严重 ' + bad + ' 条），按列归类';
+  tb.innerHTML = '<thead><tr><th>列</th><th style="width:96px">类别</th><th style="width:64px">级别</th><th>说明</th></tr></thead><tbody>' +
+    R.anomalies.map(a =>
+      '<tr><td class="mono">' + esc(a.col) + '</td><td>' + esc(a.kind) + '</td>' +
+      '<td>' + (a.level === 'bad'
+        ? '<span class="badge b-warn">严重</span>'
+        : '<span class="badge" style="background:#fffbeb;color:#b45309">提示</span>') + '</td>' +
+      '<td>' + esc(a.text) + '</td></tr>'
+    ).join('') + '</tbody>';
+}
+
+/* ============================================================
+   14. SQL DDL 反推
+   ============================================================ */
+function qIdent(name, dialect){
+  const s = String(name);
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) return s;
+  return dialect === 'mysql' ? '`' + s.replace(/`/g, '``') + '`' : '"' + s.replace(/"/g, '""') + '"';
+}
+function qStr(s){ return "'" + String(s).replace(/'/g, "''") + "'"; }
+
+function sqlType(p, dialect){
+  const maxLen = p.strStats ? Math.max(8, Math.ceil(p.strStats.maxLen * 1.3)) : 255;
+  const vc = n => dialect === 'mysql' ? (n > 1000 ? 'TEXT' : 'VARCHAR(' + n + ')') : 'VARCHAR(' + n + ')';
+  switch (p.type){
+    case 'int':
+      if (dialect === 'sqlite') return 'INTEGER';
+      if (p.numStats && (Math.abs(p.numStats.max) > 2.1e9 || Math.abs(p.numStats.min) > 2.1e9)) return 'BIGINT';
+      return dialect === 'mysql' ? 'BIGINT' : 'INTEGER';
+    case 'float':
+      return dialect === 'pg' ? 'DOUBLE PRECISION' : (dialect === 'mysql' ? 'DOUBLE' : 'REAL');
+    case 'bool':
+      return dialect === 'pg' ? 'BOOLEAN' : (dialect === 'mysql' ? 'TINYINT(1)' : 'INTEGER');
+    case 'date': return 'DATE';
+    case 'datetime': return dialect === 'pg' ? 'TIMESTAMP' : (dialect === 'mysql' ? 'DATETIME' : 'TEXT');
+    case 'uuid': return dialect === 'pg' ? 'UUID' : 'CHAR(36)';
+    case 'ip': return dialect === 'pg' ? 'INET' : vc(45);
+    case 'email': return vc(clamp(maxLen, 32, 320));
+    case 'url': return vc(clamp(maxLen, 32, 2048));
+    case 'enum': return dialect === 'pg' ? 'TEXT' : vc(clamp(maxLen, 8, 255));
+    case 'empty': return 'TEXT';
+    default: return dialect === 'pg' ? 'TEXT' : vc(clamp(maxLen, 8, 4000));
+  }
+}
+
+function derivedNote(R, idx){
+  const ds = R.derivable.get(idx);
+  if (!ds || !ds.length) return '';
+  const numeric = new Set(R.profiles.filter(p => p.type === 'int' || p.type === 'float').map(p => p.idx));
+  // 只有「数值 → 数值」才谈得上算出来；决定出文本/日期的只能说"完全决定"
+  const calc = numeric.has(idx) ? ds.find(d => d.every(i => numeric.has(i))) : null;
+  const pick = calc || ds[0];
+  const verb = calc ? '可由 ' : '由 ';
+  return verb + pick.map(i => R.header[i]).join(' + ') + (calc ? ' 计算得出' : ' 完全决定');
+}
+
+function genDDL(R, dialect){
+  const q = n => qIdent(n, dialect);
+  const pk = R.keys.length ? R.keys[0] : null;
+  const pkSet = new Set(pk || []);
+  const now = new Date().toLocaleString('zh-CN', { hour12: false });
+  const out = [];
+
+  out.push('-- Schema Dowser · 由数据反推的建表语句');
+  out.push('-- 数据源：' + R.n + ' 行 × ' + R.header.length + ' 列' + (R.sampled ? '（已采样，原始更多）' : ''));
+  out.push('-- 生成时间：' + now + ' · 方言：' + ({pg:'PostgreSQL', mysql:'MySQL', sqlite:'SQLite'})[dialect]);
+  out.push('-- 主键：' + (pk ? pk.map(i => R.header[i]).join(' + ') : '未发现（建议加自增列）'));
+  out.push('');
+
+  const parts = [];
+  const checks = [];
+  R.profiles.forEach(p => {
+    if (p.type === 'empty') return;
+    let code = q(p.name) + ' ' + sqlType(p, dialect);
+    code = code.padEnd(44);
+    if (p.missing === 0) code += ' NOT NULL';
+    parts.push({ code: code.replace(/\s+$/, ''), note: derivedNote(R, p.idx) });
+    // 取值少、且不是标识符列才加 CHECK：给客户 ID 锁死 24 个取值只会碍事
+    if (p.type === 'enum' && p.values && p.values.length > 1 && p.values.length <= 12 &&
+        !/(^|_)(id|code|no|key|uuid)$/i.test(p.name))
+      checks.push({ name: p.name, vals: p.values });
+  });
+  if (pk) parts.push({ code: 'PRIMARY KEY (' + pk.map(i => q(R.header[i])).join(', ') + ')' });
+  // 单列唯一且非主键
+  R.profiles.forEach(p => {
+    if (p.type === 'empty') return;
+    if (p.missing === 0 && p.distinct === p.present && p.present > 1 && !pkSet.has(p.idx))
+      parts.push({ code: 'UNIQUE (' + q(p.name) + ')' });
+  });
+  checks.forEach(c => {
+    parts.push({ code: 'CONSTRAINT chk_' + c.name.replace(/\W/g, '_') + ' CHECK (' + q(c.name) + ' IN (' +
+      c.vals.map(qStr).join(', ') + '))' });
+  });
+  // 逗号必须落在注释之前，否则整行注释会把分隔符吃掉
+  const bodyText = parts.map((x, i) =>
+    '  ' + x.code + (i < parts.length - 1 ? ',' : '') + (x.note ? '  -- ' + x.note : '')
+  ).join('\n');
+
+  out.push('CREATE TABLE imported_data (');
+  out.push(bodyText);
+  out.push(');');
+  out.push('');
+
+  const advice = normalizeAdvice(R);
+  if (advice.length){
+    out.push('-- ---------------------------------------------------------');
+    out.push('-- 规范化：以下列只依赖局部键而非整行主键，建议拆成独立的表');
+    out.push('-- ---------------------------------------------------------');
+    advice.forEach(a => {
+      const cols = a.det.concat(a.covered);
+      out.push('');
+      out.push('CREATE TABLE ' + q(a.table) + ' (');
+      const inner = cols.map((i, k) => {
+        const p = R.profiles[i];
+        let l = '  ' + q(p.name) + ' ' + sqlType(p, dialect);
+        l = l.padEnd(46);
+        if (a.det.includes(i) || p.missing === 0) l += ' NOT NULL';
+        return l;
+      });
+      inner.push('  PRIMARY KEY (' + a.det.map(i => q(R.header[i])).join(', ') + ')');
+      out.push(inner.join(',\n'));
+      out.push(');');
+      out.push('-- 主表外键：ALTER TABLE imported_data ADD CONSTRAINT fk_' + a.table +
+        ' FOREIGN KEY (' + a.det.map(i => q(R.header[i])).join(', ') + ') REFERENCES ' + q(a.table) +
+        ' (' + a.det.map(i => q(R.header[i])).join(', ') + ');');
+    });
+    out.push('');
+  }
+  return out.join('\n');
+}
+
+/* ============================================================
+   15. 规范化建议
+   ============================================================ */
+function isSuperKey(combo, n, allCodes){
+  const seen = new Set();
+  for (let i = 0; i < n; i++){
+    let k;
+    if (combo.length === 1) k = allCodes[combo[0]][i];
+    else { k = ''; for (let j = 0; j < combo.length; j++) k += allCodes[combo[j]][i] + '\u0001'; }
+    if (seen.has(k)) return false;
+    seen.add(k);
+  }
+  return true;
+}
+
+function normalizeAdvice(R){
+  const n = R.n;
+
+  /* 1) 互相决定的列归为同一等价类：
+        email ↔ customer_id ↔ signup_date 是同一个客户实体的几把钥匙，
+        不合并的话会被当成三张不同的表。 */
+  const detSet = new Map();
+  R.deps.forEach(d => {
+    if (d.weak) return;
+    // 归一化后成立的近似依赖也算「互相决定」——写法不同而已
+    if (d.viol !== 0 && d.cause !== '写法差异') return;
+    if (d.det.length !== 1) return;
+    if (!detSet.has(d.det[0])) detSet.set(d.det[0], new Set());
+    detSet.get(d.det[0]).add(d.dep);
+  });
+  const parent = new Map();
+  const find = x => { let r = x; while (parent.has(r) && parent.get(r) !== r) r = parent.get(r); return r; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+  detSet.forEach((ys, x) => ys.forEach(y => {
+    const sy = detSet.get(y);
+    if (sy && sy.has(x)) union(x, y);
+  }));
+
+  /* 2) 每个等价类选一个代表：名字越像 id 越优先 */
+  const members = new Map();
+  R.cols.forEach(x => { const r = find(x); if (!members.has(r)) members.set(r, []); members.get(r).push(x); });
+  const score = i => {
+    const nm = R.header[i].toLowerCase();
+    if (/(^|_)(id|code|no|uuid|key)$/.test(nm)) return 0;
+    if (/id/.test(nm)) return 1;
+    return 2;
+  };
+  const repOf = new Map();
+  members.forEach((arr, r) => {
+    arr.sort((a, b) => (score(a) - score(b)) || (R.header[a].length - R.header[b].length));
+    repOf.set(r, arr[0]);
+  });
+  const rep = x => repOf.get(find(x));
+
+  /* 3) 按「代表化后的决定因子」重新分组 */
+  const groups = new Map();
+  R.deps.forEach(d => {
+    if (d.weak || d.trivial) return;
+    // 归一化后成立的近似依赖也算数 —— 写法不统一不改变结构
+    if (d.viol !== 0 && d.cause !== '写法差异') return;
+    const det = [];
+    d.det.forEach(x => { const r = rep(x); if (!det.includes(r)) det.push(r); });
+    if (det.length !== d.det.length) return;          // 决定因子内部互为等价 → 冗余组合，跳过
+    if (isSuperKey(det, n, R.allCodes)) return;        // 决定因子本身就是键 → 它标识整行，不是子实体
+    if (d.det.includes(d.dep)) return;                 // 自反
+    // 实体表的主键是标识符，不是度量值：数值列当决定因子基本都是巧合
+    if (det.some(x => R.profiles[x].type === 'int' || R.profiles[x].type === 'float')) return;
+    // 只保留单列决定因子：多列组合出来的"表"在真实数据里绝大多数是过拟合
+    if (det.length > 1) return;
+    // 与决定因子等价的列（email 之于 customer_id）仍应作为属性列留下，
+    // 只是它自己不能再当一次决定因子 —— 上面那条 det.includes(d.dep) 已经挡掉
+    if (det.includes(d.dep)) return;
+    const key = det.slice().sort((a, b) => a - b).join(',');
+    if (!groups.has(key)) groups.set(key, { det, covered: [] });
+    const g = groups.get(key);
+    if (!det.includes(d.dep) && !g.covered.includes(d.dep)) g.covered.push(d.dep);
+  });
+
+  let list = Array.from(groups.values()).filter(g => g.covered.length);
+  // 去掉被更小决定因子完全覆盖的
+  list = list.filter(a => !list.some(b =>
+    b !== a && b.det.length < a.det.length &&
+    b.det.every(x => a.det.includes(x)) &&
+    a.covered.every(y => b.covered.includes(y))
+  ));
+  /* 排序：标识符类的决定因子优先（那才是真正的"实体"），其次看覆盖多少列 */
+  const idish = g => (score(g.det[0]) <= 1 ? 1 : 0);
+  list.sort((a, b) => (idish(b) - idish(a)) || (b.covered.length - a.covered.length) || (a.det.length - b.det.length));
+
+  // 表名去重：同一个名字出现多次会生成重复的 CREATE TABLE
+  const used = new Map();
+  return list.slice(0, 4).map((g, i) => {
+    let table = suggestTableName(g.det, R, i);
+    if (used.has(table)){ used.set(table, used.get(table) + 1); table = table + '_' + used.get(table); }
+    else used.set(table, 1);
+    return {
+      det: g.det,
+      covered: g.covered,
+      table,
+      transitive: isTransitive(g.det, R),
+      numericDet: g.det.every(x => R.profiles[x].type === 'int' || R.profiles[x].type === 'float')
+    };
+  });
+}
+function suggestTableName(det, R, i){
+  let base = R.header[det[0]].replace(/[_\-]?(id|code|no|uuid|key)$/i, '');
+  if (!base) base = 'group_' + i;
+  const name = base.toLowerCase().replace(/\W+/g, '_').replace(/^_|_$/g, '');
+  if (!name) return 'group_' + i;
+  if (/[^aeiou]y$/.test(name)) return name.slice(0, -1) + 'ies';   // city → cities
+  if (/(s|x|z|ch|sh)$/.test(name)) return name + 'es';
+  return name + 's';
+}
+function isTransitive(det, R){
+  // 若决定因子自身还能被别的（非键）列决定 → 传递依赖
+  return R.deps.some(d => d.viol === 0 && !d.trivial &&
+    d.dep !== undefined && det.includes(d.dep) && !d.det.some(x => det.includes(x)));
+}
+
+function renderNorm(R){
+  const box = $('#normBox');
+  const advice = normalizeAdvice(R);
+  if (!advice.length){
+    box.innerHTML = '<div class="empty">没有发现部分依赖或传递依赖 —— 这张表现在就是规整的。</div>';
+    return;
+  }
+  box.innerHTML = advice.map(a => {
+    const det = a.det.map(i => '<span class="chip k">' + esc(R.header[i]) + '</span>').join(' + ');
+    const cov = a.covered.map(i => '<span class="chip">' + esc(R.header[i]) + '</span>').join(' ');
+    return '<div class="dep"><div class="dep-h">' + det +
+      '<span class="arrow">→</span><span style="font-size:12px;color:var(--ink3)">' + a.covered.length + ' 列</span></div>' +
+      '<div class="dep-m">建议拆出表 <b>' + esc(a.table) + '</b>（主键 ' + a.det.map(i => esc(R.header[i])).join(' + ') + '）</div>' +
+      '<div class="topv" style="margin-top:8px">' + cov + '</div>' +
+      (a.transitive ? '<div class="flag" style="margin-top:8px">传递依赖：这些列经过中间列依赖主键，拆出去才能避免更新异常</div>'
+                    : '<div class="flag" style="margin-top:8px">部分依赖：这些列只认 ' + esc(R.header[a.det[0]]) + '，不认整行</div>') +
+      (a.numericDet ? '<div class="flag bad" style="margin-top:6px">决定因子全是数值列 —— 也可能是数值上的巧合，按业务常识判断</div>' : '') +
+      '</div>';
+  }).join('');
+}
+
+/* ============================================================
+   16. Markdown 报告
+   ============================================================ */
+function genReport(R){
+  const L = [];
+  const now = new Date().toLocaleString('zh-CN', { hour12: false });
+  L.push('# Schema Dowser 报告');
+  L.push('');
+  L.push('- 数据规模：**' + R.n + ' 行 × ' + R.header.length + ' 列**（' + fmtNum(R.totalCells) + ' 个单元格）' + (R.sampled ? '，已采样自更多行' : ''));
+  L.push('- 整体缺失率：**' + pct(R.missRate, 2) + '**');
+  L.push('- 候选键：' + (R.keys.length ? R.keys.slice(0, 3).map(k => k.map(i => '`' + R.header[i] + '`').join(' + ')).join('，') : '**未发现**'));
+  L.push('- 函数依赖：' + R.deps.filter(d => d.viol === 0).length + ' 条精确，' + R.deps.filter(d => d.viol > 0).length + ' 条近似');
+  L.push('- 可派生列：' + R.derivable.size + ' 个');
+  L.push('- 质量告警：' + R.anomalies.length + ' 条（严重 ' + R.anomalies.filter(a => a.level === 'bad').length + ' 条）');
+  L.push('- 生成时间：' + now);
+  L.push('');
+
+  L.push('## 列剖面');
+  L.push('');
+  L.push('| 列 | 推断类型 | 非空 | 缺失 | 基数 | 唯一率 | 样例 / 范围 |');
+  L.push('|---|---|---:|---:|---:|---:|---|');
+  R.profiles.forEach(p => {
+    let extra = '—';
+    if (p.numStats) extra = fmtNum(p.numStats.min) + ' ~ ' + fmtNum(p.numStats.max) + '（中位 ' + fmtNum(p.numStats.med) + '）';
+    else if (p.dateStats) extra = p.dateStats.min.toISOString().slice(0, 10) + ' ~ ' + p.dateStats.max.toISOString().slice(0, 10);
+    else if (p.top.length) extra = p.top.slice(0, 3).map(t => t.v).join(' / ');
+    L.push('| `' + p.name + '` | ' + typeLabel(p.type) + ' | ' + p.present + ' | ' + p.missing + ' | ' +
+           p.distinct + ' | ' + pct(p.uniqRate, 1) + ' | ' + extra.replace(/\|/g, '\\|') + ' |');
+  });
+  L.push('');
+
+  L.push('## 候选键');
+  L.push('');
+  if (R.keys.length) R.keys.slice(0, 8).forEach((k, i) => {
+    L.push((i === 0 ? '- **' : '- ') + k.map(x => '`' + R.header[x] + '`').join(' + ') + (i === 0 ? '**（推荐主键）' : ''));
+  }); else L.push('- 未发现唯一键 —— 表中存在完全重复的行');
+  L.push('');
+
+  L.push('## 函数依赖');
+  L.push('');
+  const exact = R.deps.filter(d => d.viol === 0 && !d.weak);
+  const approx = R.deps.filter(d => d.viol > 0 && !d.weak);
+  L.push('### 精确依赖（' + exact.length + ' 条）');
+  L.push('');
+  const nonT = exact.filter(d => !d.trivial);
+  if (nonT.length){
+    L.push('| 决定方 | 被决定列 | 说明 |');
+    L.push('|---|---|---|');
+    nonT.slice(0, 60).forEach(d => {
+      L.push('| ' + d.det.map(i => '`' + R.header[i] + '`').join(' + ') + ' | `' + R.header[d.dep] + '` | ' +
+             (d.det.length > 1 ? d.det.length + ' 列联合决定' : '单列决定') + ' |');
+    });
+    if (exact.length > nonT.length) L.push('');
+    if (exact.length > nonT.length) L.push('（另有 ' + (exact.length - nonT.length) + ' 条「键决定一切」的平凡依赖，未列出）');
+  } else L.push('无非平凡依赖。');
+  L.push('');
+  if (approx.length){
+    L.push('### 近似依赖（' + approx.length + ' 条，通常由脏数据造成）');
+    L.push('');
+    L.push('| 决定方 | 被决定列 | 违反行数 | 占比 |');
+    L.push('|---|---|---:|---:|');
+    approx.slice(0, 30).forEach(d => {
+      L.push('| ' + d.det.map(i => '`' + R.header[i] + '`').join(' + ') + ' | `' + R.header[d.dep] + '` | ' +
+             d.viol + ' | ' + pct(d.viol / R.n, 2) + ' |');
+    });
+    L.push('');
+  }
+
+  L.push('## 规范化建议');
+  L.push('');
+  const advice = normalizeAdvice(R);
+  if (advice.length) advice.forEach(a => {
+    L.push('- 拆出 **' + a.table + '**，主键 `' + a.det.map(i => R.header[i]).join(' + ') + '`，包含：' +
+      a.covered.map(i => '`' + R.header[i] + '`').join('、') +
+      (a.transitive ? '（传递依赖）' : '（部分依赖）'));
+  }); else L.push('- 无需拆分。');
+  L.push('');
+
+  L.push('## 数据质量告警');
+  L.push('');
+  if (R.anomalies.length){
+    L.push('| 列 | 类别 | 级别 | 说明 |');
+    L.push('|---|---|---|---|');
+    R.anomalies.forEach(a => {
+      L.push('| `' + a.col + '` | ' + a.kind + ' | ' + (a.level === 'bad' ? '严重' : '提示') + ' | ' + a.text.replace(/\|/g, '\\|') + ' |');
+    });
+  } else L.push('未发现明显问题。');
+  L.push('');
+
+  L.push('## 建表语句（PostgreSQL）');
+  L.push('');
+  L.push('```sql');
+  L.push(genDDL(R, 'pg'));
+  L.push('```');
+  L.push('');
+  L.push('---');
+  L.push('由 [Schema Dowser](https://github.com/CJX0712/schema-dowser) 生成本地报告，数据未离开本机。');
+  return L.join('\n');
+}
+
+/* ============================================================
+   17. 导出
+   ============================================================ */
+function download(name, text, mime){
+  const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+function exportPng(){
+  const svg = $('#depSvg');
+  if (!svg) return;
+  const vb = svg.viewBox.baseVal;
+  const scale = 2;
+  const s = new XMLSerializer().serializeToString(svg);
+  const img = new Image();
+  const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = vb.width * scale; c.height = vb.height * scale;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    c.toBlob(b => {
+      const u = URL.createObjectURL(b);
+      const a = document.createElement('a');
+      a.href = u; a.download = 'schema-dowser-deps.png';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(u); a.remove(); }, 500);
+    });
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); };
+  img.src = url;
+}
+function exportSvg(){
+  const svg = $('#depSvg');
+  if (!svg) return;
+  download('schema-dowser-deps.svg', new XMLSerializer().serializeToString(svg), 'image/svg+xml;charset=utf-8');
+}
+
+/* ============================================================
+   18. 事件与初始化
+   ============================================================ */
+let R = null;
+
+function run(){
+  const btn = $('#btnRun');
+  const err = $('#ioErr');
+  const text = $('#raw').value;
+  if (!text.trim()){ err.textContent = '先粘贴点数据，或者点「载入示例」'; return; }
+  err.textContent = '';
+  btn.disabled = true; btn.textContent = '探矿中…';
+  // 让浏览器把按钮状态画出来再算
+  setTimeout(() => {
+    try {
+      R = analyze(text, {
+        delim: $('#delim').value,
+        hdr: $('#hdr').checked,
+        lvl: $('#lvl').value,
+        cap: $('#cap').value
+      });
+      renderStats(R);
+      renderCols(R);
+      renderDeps(R);
+      renderGraph(R);
+      renderKeys(R);
+      renderCorr(R);
+      renderQuality(R);
+      renderNorm(R);
+      $('#ddl').textContent = genDDL(R, $('#dialect').value);
+      $('#out').hidden = false;
+    } catch (e){
+      err.textContent = '分析失败：' + (e && e.message ? e.message : e);
+    } finally {
+      btn.disabled = false; btn.textContent = '开始探矿';
+    }
+  }, 16);
+}
+
+function bind(){
+  $('#btnRun').addEventListener('click', run);
+  $('#btnSample').addEventListener('click', () => { $('#raw').value = buildSample(); $('#ioErr').textContent = ''; run(); });
+  $('#btnClear').addEventListener('click', () => { $('#raw').value = ''; $('#out').hidden = true; $('#ioErr').textContent = ''; });
+  $('#btnFile').addEventListener('click', () => $('#file').click());
+  $('#file').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => { $('#raw').value = String(fr.result); $('#delim').value = 'auto'; run(); };
+    fr.readAsText(f, 'utf-8');
+  });
+
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => { $('#raw').value = String(fr.result); $('#delim').value = 'auto'; run(); };
+    fr.readAsText(f, 'utf-8');
+  });
+
+  $$('.tabs button').forEach(b => b.addEventListener('click', () => {
+    $$('.tabs button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    $$('[data-tab]').forEach(s => s.classList.toggle('on', s.getAttribute('data-tab') === b.getAttribute('data-go')));
+  }));
+
+  $('#dialect').addEventListener('change', () => { if (R) $('#ddl').textContent = genDDL(R, $('#dialect').value); });
+  $('#btnCopyDdl').addEventListener('click', () => {
+    const t = $('#ddl').textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => {
+      const b = $('#btnCopyDdl'); const old = b.textContent; b.textContent = '已复制'; setTimeout(() => b.textContent = old, 1200);
+    });
+    else { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  });
+  $('#btnDlDdl').addEventListener('click', () => { if (R) download('schema.sql', genDDL(R, $('#dialect').value), 'text/sql;charset=utf-8'); });
+  $('#btnReport').addEventListener('click', () => { if (R) download('schema-dowser-report.md', genReport(R), 'text/markdown;charset=utf-8'); });
+  $('#btnSvg').addEventListener('click', exportSvg);
+  $('#btnPng').addEventListener('click', exportPng);
+}
+
+bind();
+$('#raw').value = buildSample();
+run();
+</script>
+</body>
+</html>
