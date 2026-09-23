@@ -1,0 +1,61 @@
+name: ci
+
+# Static hygiene for the single-file HTML tool: existence, size and
+# syntax of every inline <script> block.
+# Author: 晨星
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: static checks (node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Static + inline-script syntax checks
+        run: |
+          cat > /tmp/check.cjs <<'CHECKS'
+          const fs = require('fs'), path = require('path'), cp = require('child_process'), os = require('os');
+          let fails = 0;
+          const idx = 'index.html';
+          if (!fs.existsSync(idx)) { console.error('::error::index.html not found'); process.exit(1); }
+          const html = fs.readFileSync(idx, 'utf8');
+          const bytes = Buffer.byteLength(html);
+          console.log('index.html: ' + bytes + ' bytes');
+          if (bytes < 200) { console.error('::error::index.html is suspiciously small'); fails++; }
+          const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+          let m, n = 0;
+          while ((m = re.exec(html))) {
+            const attrs = m[1] || '';
+            if (/\bsrc\s*=/i.test(attrs)) continue;
+            const code = m[2];
+            if (!code.trim()) continue;
+            n++;
+            const isMod = /type\s*=\s*["']?module/i.test(attrs);
+            const f = path.join(os.tmpdir(), 'inline_' + n + (isMod ? '.mjs' : '.cjs'));
+            fs.writeFileSync(f, code);
+            const r = cp.spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+            if (r.status !== 0) { console.error('::error::inline script #' + n + ' syntax error\n' + r.stderr); fails++; }
+            else console.log('inline script #' + n + ': syntax OK (' + (isMod ? 'module' : 'script') + ', ' + code.length + ' chars)');
+          }
+          console.log('inline scripts checked: ' + n);
+          if (fails) { console.error('FAILED: ' + fails + ' problem(s)'); process.exit(1); }
+          console.log('all static checks passed');
+          CHECKS
+          node /tmp/check.cjs
