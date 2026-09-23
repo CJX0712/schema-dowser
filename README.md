@@ -1,5 +1,12 @@
 # Schema Dowser · 表格探矿仪
 
+<p align="center">
+  <a href="https://github.com/CJX0712/schema-dowser/actions/workflows/ci.yml"><img src="https://github.com/CJX0712/schema-dowser/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="https://github.com/CJX0712/schema-dowser/releases"><img src="https://img.shields.io/github/v/release/CJX0712/schema-dowser?sort=semver" alt="release"></a>
+  <a href="https://github.com/CJX0712/schema-dowser/blob/main/LICENSE"><img src="https://img.shields.io/github/license/CJX0712/schema-dowser" alt="license"></a>
+  <img src="https://img.shields.io/badge/author-%E6%99%A8%E6%98%9F-1f6feb" alt="author">
+</p>
+
 把一堆 CSV 丢进去，探出**隐藏的键、依赖、脏数据，以及本该拆出去的表**。
 
 单文件 HTML，零依赖，全部计算在浏览器内存里完成 —— 数据不联网、不上传、不落盘。
